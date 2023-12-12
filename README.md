@@ -21,7 +21,7 @@ This tool is for training.
 ## Installation
 
 ```
-go install github.com/destan0098/combolist/cmd/basicauthbruteforce@latest
+go install github.com/destan0098/combolist/cmd/combolistmaker@latest
 ```
 or use
 ```
@@ -34,20 +34,17 @@ git clone https://github.com/destan0098/combolist.git
 
 ```
 USAGE:
-   basicauthbruteforce.exe [global options] command [command options] [arguments...]
+   combolistmaker.exe [global options] command [command options] [arguments...]
 
 COMMANDS:
    help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
-   --url value, -d value       Enter Site URL
-   --username value, -u value  Enter Username Wordlist
-   --password value, -p value  Enter Password Wordlist
-   --rate value, -r value      rate limit (default: 1)
-   --random-agent, -a          Random Agent (default: false)
-   --delay, -e                 Delay between request , default 0 , if use best rate =1 
-   --help, -h                  show help
-BasicAuth
+   --username value, -u value   Enter Username Wordlist
+   --password value, -p value   Enter Password Wordlist
+   --combolist value, -c value  Enter Combo Wordlist output
+   --help, -h                   show help
+
 
 ```
 
@@ -59,6 +56,6 @@ BasicAuth
 
 ## Features
 
-This Tool BruteForce Basic Authentication  with wordlist 
+This Tool make combolist 
 
 
