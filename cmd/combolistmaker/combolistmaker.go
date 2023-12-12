@@ -101,6 +101,7 @@ func main() {
 			wg.Add(1)
 			go func(usern, passw string) {
 				defer wg.Done()
+
 				combol := fmt.Sprintf("%s:%s\n", usern, passw)
 				mu.Lock()
 				combo = append(combo, combol)
