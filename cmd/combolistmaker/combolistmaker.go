@@ -1,16 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"github.com/TwiN/go-color"
 	"github.com/urfave/cli/v2"
-	"io/ioutil"
 	"log"
 	"os"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -87,29 +86,36 @@ func main() {
 		err := passwordsdic.Close()
 		errorpars(err)
 	}(passwordsdic)
+
+	linesuser := make([]string, 0)
+	linespassw := make([]string, 0)
+
+	done := make(chan struct{})
+
+	// Use bufio.Scanner for reading files
+	processFile := func(file *os.File, lines *[]string) {
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			*lines = append(*lines, scanner.Text())
+		}
+		done <- struct{}{}
+	}
+
 	// Read content of wordlist files
-	usernamedicbyte, err := ioutil.ReadAll(usernamedic)
-	errorpars(err)
-	passwordsdicbyte, err := ioutil.ReadAll(passwordsdic)
-	errorpars(err)
-	linesuser := strings.Split(string(usernamedicbyte), "\r\n")
-	linespassw := strings.Split(string(passwordsdicbyte), "\n")
-	var wg sync.WaitGroup
-	var mu sync.Mutex
+	go processFile(usernamedic, &linesuser)
+	go processFile(passwordsdic, &linespassw)
+
+	// Wait for both files to finish reading
+	<-done
+	<-done
+
+	// Add jobs to the queue
 	for _, usern := range linesuser {
 		for _, passw := range linespassw {
-			wg.Add(1)
-			go func(usern, passw string) {
-				defer wg.Done()
-
-				combol := fmt.Sprintf("%s:%s\n", usern, passw)
-				mu.Lock()
-				combo = append(combo, combol)
-				mu.Unlock()
-			}(usern, passw)
+			com := fmt.Sprintf("%s:%s\n", usern, passw)
+			combo = append(combo, com)
 		}
 	}
-	wg.Wait()
 	writeResults(combo, combolist)
 }
 
