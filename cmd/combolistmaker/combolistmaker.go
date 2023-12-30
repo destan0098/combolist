@@ -88,34 +88,34 @@ func main() {
 
 	linesuser := make([]string, 0)
 	linespassw := make([]string, 0)
-
+	var wg sync.WaitGroup
 	doneUser := make(chan struct{})
 	donePass := make(chan struct{})
-
+	wg.Add(2)
 	// Read content of wordlist files and generate combos in parallel
-	go readInChunks(usernamedic, 100, &linesuser, doneUser)
-	go readInChunks(passwordsdic, 100, &linespassw, donePass)
-
+	go readInChunks(usernamedic, &linesuser, &wg, doneUser)
+	go readInChunks(passwordsdic, &linespassw, &wg, donePass)
+	wg.Wait()
 	// Wait for files to finish reading
 	<-doneUser
 	<-donePass
 
 	// Add jobs to the queue and process combos in parallel
-	var wg sync.WaitGroup
+
+	fmt.Println(len(linesuser), len(linespassw))
 	combo := make(chan string, len(linesuser)*len(linespassw))
 
 	// Create worker goroutines
-	for i := 0; i < runtime.NumCPU(); i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for usern := range linesuser {
-				for passw := range linespassw {
-					com := fmt.Sprintf("%s:%s\n", usern, passw)
-					combo <- com
-				}
-			}
-		}()
+	// Create worker goroutines
+	for _, usern := range linesuser {
+		for _, passw := range linespassw {
+			wg.Add(1)
+			go func(usern, passw string) {
+				defer wg.Done()
+				com := fmt.Sprintf("%s:%s\n", usern, passw)
+				combo <- com
+			}(usern, passw)
+		}
 	}
 
 	// Close combo channel when all workers are done
@@ -173,9 +173,15 @@ func writeToFile(results <-chan string, filePath string) {
 	fmt.Printf("Execution time: %s\n", elapsed)
 }
 
+//var counter int
+
 // Function to read file in chunks
-func readInChunks(file *os.File, chunkSize int, lines *[]string, done chan<- struct{}) {
-	defer close(done)
+// Function to read file in chunks
+func readInChunks(file *os.File, lines *[]string, wg *sync.WaitGroup, done chan<- struct{}) {
+	defer func() {
+		close(done)
+		wg.Done()
+	}()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		*lines = append(*lines, scanner.Text())
