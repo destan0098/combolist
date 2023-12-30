@@ -10,12 +10,12 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
 var start time.Time
 var username, password, combolist string
-var combo []string
 
 // Function to handle parsing errors
 func errorpars(err error) {
@@ -23,6 +23,7 @@ func errorpars(err error) {
 		log.Panic(err.Error())
 	}
 }
+
 func main() {
 	start = time.Now()
 	runtime.GOMAXPROCS(1)
@@ -57,14 +58,12 @@ func main() {
 		Action: func(cCtx *cli.Context) error {
 			// Switch case to handle different scenarios based on provided options
 			switch {
-
 			case cCtx.String("username") == "":
 				fmt.Println(color.Colorize(color.Red, "[-] Please Enter Username Wordlist Address with -u"))
 			case cCtx.String("password") == "":
 				fmt.Println(color.Colorize(color.Red, "[-] Please Enter Password Wordlist Address with -u"))
 			case cCtx.String("combolist") == "":
 				fmt.Println(color.Colorize(color.Red, "[-] Please Enter Password Wordlist Address with -u"))
-
 			}
 			return nil
 		},
@@ -90,38 +89,47 @@ func main() {
 	linesuser := make([]string, 0)
 	linespassw := make([]string, 0)
 
-	done := make(chan struct{})
+	doneUser := make(chan struct{})
+	donePass := make(chan struct{})
 
-	// Use bufio.Scanner for reading files
-	processFile := func(file *os.File, lines *[]string) {
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			*lines = append(*lines, scanner.Text())
-		}
-		done <- struct{}{}
+	// Read content of wordlist files and generate combos in parallel
+	go readInChunks(usernamedic, 100, &linesuser, doneUser)
+	go readInChunks(passwordsdic, 100, &linespassw, donePass)
+
+	// Wait for files to finish reading
+	<-doneUser
+	<-donePass
+
+	// Add jobs to the queue and process combos in parallel
+	var wg sync.WaitGroup
+	combo := make(chan string, len(linesuser)*len(linespassw))
+
+	// Create worker goroutines
+	for i := 0; i < runtime.NumCPU(); i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for usern := range linesuser {
+				for passw := range linespassw {
+					com := fmt.Sprintf("%s:%s\n", usern, passw)
+					combo <- com
+				}
+			}
+		}()
 	}
 
-	// Read content of wordlist files
-	go processFile(usernamedic, &linesuser)
-	go processFile(passwordsdic, &linespassw)
+	// Close combo channel when all workers are done
+	go func() {
+		wg.Wait()
+		close(combo)
+	}()
 
-	// Wait for both files to finish reading
-	<-done
-	<-done
-
-	// Add jobs to the queue
-	for _, usern := range linesuser {
-		for _, passw := range linespassw {
-			com := fmt.Sprintf("%s:%s\n", usern, passw)
-			combo = append(combo, com)
-		}
-	}
+	// Process combos and write results
 	writeResults(combo, combolist)
 }
 
 // write result to file output
-func writeResults(results []string, outname string) {
-
+func writeResults(results <-chan string, outname string) {
 	path := "output"
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		err := os.Mkdir(path, os.ModePerm)
@@ -131,22 +139,19 @@ func writeResults(results []string, outname string) {
 	}
 
 	writeToFile(results, path+"/"+outname)
-
 }
 
 // write text output file
-func writeTextFile(file *os.File, results []string) {
-	for _, co := range results {
-
+func writeTextFile(file *os.File, results <-chan string) {
+	for co := range results {
 		if _, err := file.WriteString(co); err != nil {
 			log.Println(err)
-
 		}
 	}
 }
 
 // detect file format to save output file
-func writeToFile(results []string, filePath string) {
+func writeToFile(results <-chan string, filePath string) {
 	file, err := os.Create(filePath)
 	if err != nil {
 		log.Fatal(err)
@@ -166,4 +171,13 @@ func writeToFile(results []string, filePath string) {
 	}
 	elapsed := time.Since(start)
 	fmt.Printf("Execution time: %s\n", elapsed)
+}
+
+// Function to read file in chunks
+func readInChunks(file *os.File, chunkSize int, lines *[]string, done chan<- struct{}) {
+	defer close(done)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		*lines = append(*lines, scanner.Text())
+	}
 }
